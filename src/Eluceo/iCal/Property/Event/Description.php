@@ -9,11 +9,16 @@
  * with this source code in the file LICENSE.
  */
 
-namespace Eluceo\iCal\Property;
+namespace Eluceo\iCal\Property\Event;
 
+use Eluceo\iCal\Property\ValueInterface;
 use Eluceo\iCal\Util\PropertyValueUtil;
 
-class StringValue implements ValueInterface
+/**
+ * Class Description
+ * Alows new line charectars to be in the description.
+ */
+class Description implements ValueInterface
 {
     /**
      * The value.

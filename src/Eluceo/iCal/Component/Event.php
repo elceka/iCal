@@ -5,20 +5,25 @@
  *
  * (c) Markus Poerschke <markus@eluceo.de>
  *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
+ * This source file is subject to the MIT license that is bundled
+ * with this source code in the file LICENSE.
  */
 
 namespace Eluceo\iCal\Component;
 
 use Eluceo\iCal\Component;
-use Eluceo\iCal\PropertyBag;
 use Eluceo\iCal\Property;
+use Eluceo\iCal\Property\DateTimeProperty;
+use Eluceo\iCal\Property\Event\Attendees;
+use Eluceo\iCal\Property\Event\Organizer;
 use Eluceo\iCal\Property\Event\RecurrenceRule;
-use \InvalidArgumentException;
+use Eluceo\iCal\Property\Event\Description;
+use Eluceo\iCal\PropertyBag;
+use Eluceo\iCal\Property\Event\RecurrenceId;
+use Eluceo\iCal\Property\DateTimesProperty;
 
 /**
- * Implementation of the EVENT component
+ * Implementation of the EVENT component.
  */
 class Event extends Component
 {
@@ -35,6 +40,11 @@ class Event extends Component
     protected $uniqueId;
 
     /**
+     * The property indicates the date/time that the instance of
+     * the iCalendar object was created.
+     *
+     * The value MUST be specified in the UTC time format.
+     *
      * @var \DateTime
      */
     protected $dtStamp;
@@ -57,7 +67,7 @@ class Event extends Component
     protected $duration;
 
     /**
-     * @var boolean
+     * @var bool
      */
     protected $noTime = false;
 
@@ -87,13 +97,19 @@ class Event extends Component
     protected $summary;
 
     /**
+     * @var Organizer
+     */
+    protected $organizer;
+
+    /**
      * @see http://www.ietf.org/rfc/rfc2445.txt 4.8.2.7 Time Transparency
+     *
      * @var string
      */
     protected $transparency = self::TIME_TRANSPARENCY_OPAQUE;
 
     /**
-     * If set to true the timezone will be added to the event
+     * If set to true the timezone will be added to the event.
      *
      * @var bool
      */
@@ -105,14 +121,19 @@ class Event extends Component
     protected $sequence = 0;
 
     /**
-     * @var string
+     * @var Attendees
      */
-    protected $attendee;
+    protected $attendees;
 
     /**
      * @var string
      */
     protected $description;
+
+    /**
+     * @var string
+     */
+    protected $descriptionHTML;
 
     /**
      * @var string
@@ -125,11 +146,66 @@ class Event extends Component
     protected $recurrenceRule;
 
     /**
-     * Indicates if the UTC time should be used or not
+     * This property specifies the date and time that the calendar
+     * information was created.
+     *
+     * The value MUST be specified in the UTC time format.
+     *
+     * @var \DateTime
+     */
+    protected $created;
+
+    /**
+     * The property specifies the date and time that the information
+     * associated with the calendar component was last revised.
+     *
+     * The value MUST be specified in the UTC time format.
+     *
+     * @var \DateTime
+     */
+    protected $modified;
+
+    /**
+     * Indicates if the UTC time should be used or not.
      *
      * @var bool
      */
     protected $useUtc = true;
+
+    /**
+     * @var bool
+     */
+    protected $cancelled;
+
+    /**
+     * This property is used to specify categories or subtypes
+     * of the calendar component.  The categories are useful in searching
+     * for a calendar component of a particular type and category.
+     *
+     * @see https://tools.ietf.org/html/rfc5545#section-3.8.1.2
+     *
+     * @var array
+     */
+    protected $categories;
+
+    /**
+     * https://tools.ietf.org/html/rfc5545#section-3.8.1.3.
+     *
+     * @var bool
+     */
+    protected $isPrivate = false;
+
+    /**
+     * Dates to be excluded from a series of events.
+     *
+     * @var \DateTime[]
+     */
+    protected $exDates = array();
+
+    /**
+     * @var RecurrenceId
+     */
+    protected $recurrenceId;
 
     public function __construct($uniqueId = null)
     {
@@ -153,236 +229,282 @@ class Event extends Component
      */
     public function buildPropertyBag()
     {
-        $this->properties = new PropertyBag;
+        $propertyBag = new PropertyBag();
 
         // mandatory information
-        $this->properties->set('UID', $this->uniqueId);
-        $this->properties->add($this->buildDateTimeProperty(
-            'DTSTAMP',
-            $this->dtStamp ?: new \DateTime()
-        ));
-        $this->properties->add($this->buildDateTimeProperty('DTSTART', $this->dtStart, $this->noTime));
-        $this->properties->set('SEQUENCE', $this->sequence);
-        $this->properties->set('TRANSP', $this->transparency);
+        $propertyBag->set('UID', $this->uniqueId);
+
+        $propertyBag->add(new DateTimeProperty('DTSTART', $this->dtStart, $this->noTime, $this->useTimezone, $this->useUtc));
+        $propertyBag->set('SEQUENCE', $this->sequence);
+        $propertyBag->set('TRANSP', $this->transparency);
 
         if ($this->status) {
-            $this->properties->set('STATUS', $this->status);
+            $propertyBag->set('STATUS', $this->status);
         }
 
         // An event can have a 'dtend' or 'duration', but not both.
         if (null != $this->dtEnd) {
-            $this->properties->add($this->buildDateTimeProperty('DTEND', $this->dtEnd, $this->noTime));
-        } else {
-            $this->properties->set('DURATION', $this->duration->format('P%dDT%hH%iM%sS'));
+            $propertyBag->add(new DateTimeProperty('DTEND', $this->dtEnd, $this->noTime, $this->useTimezone, $this->useUtc));
+        } elseif (null != $this->duration) {
+            $propertyBag->set('DURATION', $this->duration->format('P%dDT%hH%iM%sS'));
         }
 
         // optional information
         if (null != $this->url) {
-            $this->properties->set('URL', $this->url);
+            $propertyBag->set('URL', $this->url);
         }
 
         if (null != $this->location) {
-            $this->properties->set('LOCATION', $this->location);
+            $propertyBag->set('LOCATION', $this->location);
 
-            if(null != $this->locationGeo) {
-                $this->properties->add(new Property('X-APPLE-STRUCTURED-LOCATION', 'geo:'.$this->locationGeo, array(
-                    'VALUE' => 'URI',
-                    'X-ADDRESS' => $this->location,
-                    'X-APPLE-RADIUS' => 49,
-                    'X-TITLE' => $this->locationTitle,
-                )));
+            if (null != $this->locationGeo) {
+                $propertyBag->add(
+                    new Property(
+                        'X-APPLE-STRUCTURED-LOCATION',
+                        'geo:' . $this->locationGeo,
+                        array(
+                            'VALUE'          => 'URI',
+                            'X-ADDRESS'      => $this->location,
+                            'X-APPLE-RADIUS' => 49,
+                            'X-TITLE'        => $this->locationTitle,
+                        )
+                    )
+                );
+                $propertyBag->set('GEO', str_replace(',', ';', $this->locationGeo));
             }
         }
 
         if (null != $this->summary) {
-            $this->properties->set('SUMMARY', $this->summary);
+            $propertyBag->set('SUMMARY', $this->summary);
         }
 
-        if (null != $this->attendee) {
-            $this->properties->set('ATTENDEE', $this->attendee);
+        if (null != $this->attendees) {
+            $propertyBag->add($this->attendees);
         }
+
+        $propertyBag->set('CLASS', $this->isPrivate ? 'PRIVATE' : 'PUBLIC');
 
         if (null != $this->description) {
-            $this->properties->set('DESCRIPTION', $this->description);
+            $propertyBag->set('DESCRIPTION', new Description($this->description));
+        }
+
+        if (null != $this->descriptionHTML) {
+            $propertyBag->add(
+                new Property(
+                    'X-ALT-DESC',
+                    $this->descriptionHTML,
+                    array(
+                        'FMTTYPE' => 'text/html',
+                    )
+                )
+            );
         }
 
         if (null != $this->recurrenceRule) {
-            $this->properties->set('RRULE', $this->recurrenceRule);
+            $propertyBag->set('RRULE', $this->recurrenceRule);
         }
 
-        if( $this->noTime ) {
-            $this->properties->set('X-MICROSOFT-CDO-ALLDAYEVENT', 'TRUE');
-        }
-    }
-
-    /**
-     * Creates a Property based on a DateTime object
-     *
-     * @param  string                $name     The name of the Property
-     * @param  \DateTime             $dateTime The DateTime
-     * @param  bool                  $noTime   Indicates if the time will be added
-     * @return \Eluceo\iCal\Property
-     */
-    protected function buildDateTimeProperty($name, \DateTime $dateTime, $noTime = false)
-    {
-        $dateString = $this->getDateString($dateTime, $noTime);
-        $params     = array();
-
-        if ($this->useTimezone) {
-            $timeZone       = $dateTime->getTimezone()->getName();
-            $params['TZID'] = $timeZone;
+        if (null != $this->recurrenceId) {
+            $this->recurrenceId->applyTimeSettings($this->noTime, $this->useTimezone, $this->useUtc);
+            $propertyBag->add($this->recurrenceId);
         }
 
-        if($noTime) {
-            $params['VALUE'] = 'DATE';
+        if (!empty($this->exDates)) {
+            $propertyBag->add(new DateTimesProperty('EXDATE', $this->exDates, $this->noTime, $this->useTimezone, $this->useUtc));
         }
 
-        return new Property($name, $dateString, $params);
-    }
-
-    /**
-     * Returns the date format that can be passed to DateTime::format()
-     *
-     * @param  bool   $noTime Indicates if the time will be added
-     * @return string
-     */
-    protected function getDateFormat($noTime = false)
-    {
-        // Do not use UTC time (Z) if timezone support is enabled.
-        if ($this->useTimezone || !$this->useUtc) {
-            return $noTime ? 'Ymd' : 'Ymd\THis';
-        } else {
-            return $noTime ? 'Ymd' : 'Ymd\THis\Z';
-        }
-    }
-
-    /**
-     * Returns a formatted date string
-     *
-     * @param  \DateTime|null $dateTime The DateTime object
-     * @param  bool           $noTime   Indicates if the time will be added
-     * @return mixed
-     */
-    protected function getDateString(\DateTime $dateTime = null, $noTime = false)
-    {
-        if (empty($dateTime)) {
-            $dateTime = new \DateTime();
+        if ($this->cancelled) {
+            $propertyBag->set('STATUS', 'CANCELLED');
         }
 
-        return $dateTime->format($this->getDateFormat($noTime));
+        if (null != $this->organizer) {
+            $propertyBag->add($this->organizer);
+        }
+
+        if ($this->noTime) {
+            $propertyBag->set('X-MICROSOFT-CDO-ALLDAYEVENT', 'TRUE');
+        }
+
+        if (null != $this->categories) {
+            $propertyBag->set('CATEGORIES', $this->categories);
+        }
+
+        $propertyBag->add(
+            new DateTimeProperty('DTSTAMP', $this->dtStamp ?: new \DateTime(), false, false, true)
+        );
+
+        if ($this->created) {
+            $propertyBag->add(new DateTimeProperty('CREATED', $this->created, false, false, true));
+        }
+
+        if ($this->modified) {
+            $propertyBag->add(new DateTimeProperty('LAST-MODIFIED', $this->modified, false, false, true));
+        }
+
+        return $propertyBag;
     }
 
     /**
      * @param $dtEnd
+     *
      * @return $this
      */
     public function setDtEnd($dtEnd)
     {
         $this->dtEnd = $dtEnd;
+
         return $this;
     }
 
-    /**
-     * @param $dtStart
-     * @return $this
-     */
+    public function getDtEnd()
+    {
+        return $this->dtEnd;
+    }
+
     public function setDtStart($dtStart)
     {
         $this->dtStart = $dtStart;
+
         return $this;
     }
 
     /**
      * @param $dtStamp
+     *
      * @return $this
      */
     public function setDtStamp($dtStamp)
     {
         $this->dtStamp = $dtStamp;
+
         return $this;
     }
 
     /**
      * @param $duration
+     *
      * @return $this
      */
     public function setDuration($duration)
     {
         $this->duration = $duration;
+
         return $this;
     }
 
     /**
-     * @param $location
+     * @param        $location
      * @param string $title
-     * @param null $geo
+     * @param null   $geo
+     *
      * @return $this
      */
     public function setLocation($location, $title = '', $geo = null)
     {
-        $this->location = $location;
+        $this->location      = $location;
         $this->locationTitle = $title;
-        $this->locationGeo = $geo;
+        $this->locationGeo   = $geo;
+
         return $this;
     }
 
     /**
      * @param $noTime
+     *
      * @return $this
      */
     public function setNoTime($noTime)
     {
         $this->noTime = $noTime;
+
         return $this;
     }
 
     /**
-     * @param $sequence
+     * @param int $sequence
+     *
      * @return $this
      */
     public function setSequence($sequence)
     {
         $this->sequence = $sequence;
+
+        return $this;
+    }
+
+    /**
+     * @return int
+     */
+    public function getSequence()
+    {
+        return $this->sequence;
+    }
+
+    /**
+     * @param Organizer $organizer
+     *
+     * @return $this
+     */
+    public function setOrganizer(Organizer $organizer)
+    {
+        $this->organizer = $organizer;
+
         return $this;
     }
 
     /**
      * @param $summary
+     *
      * @return $this
      */
     public function setSummary($summary)
     {
         $this->summary = $summary;
+
         return $this;
     }
 
     /**
      * @param $uniqueId
+     *
      * @return $this
      */
     public function setUniqueId($uniqueId)
     {
         $this->uniqueId = $uniqueId;
+
         return $this;
     }
 
     /**
+     * @return string
+     */
+    public function getUniqueId()
+    {
+        return $this->uniqueId;
+    }
+
+    /**
      * @param $url
+     *
      * @return $this
      */
     public function setUrl($url)
     {
         $this->url = $url;
+
         return $this;
     }
 
     /**
      * @param $useTimezone
+     *
      * @return $this
      */
     public function setUseTimezone($useTimezone)
     {
         $this->useTimezone = $useTimezone;
+
         return $this;
     }
 
@@ -395,40 +517,74 @@ class Event extends Component
     }
 
     /**
-     * @param $attendee
+     * @param Attendees $attendees
+     *
      * @return $this
      */
-    public function setAttendee($attendee)
+    public function setAttendees(Attendees $attendees)
     {
-        $this->attendee = $attendee;
+        $this->attendees = $attendees;
+
         return $this;
     }
 
     /**
-     * @return string
+     * @param string $attendee
+     * @param array  $params
+     *
+     * @return $this
      */
-    public function getAttendee()
+    public function addAttendee($attendee, $params = array())
     {
-        return $this->attendee;
+        if (!isset($this->attendees)) {
+            $this->attendees = new Attendees();
+        }
+        $this->attendees->add($attendee, $params);
+
+        return $this;
+    }
+
+    /**
+     * @return Attendees
+     */
+    public function getAttendees()
+    {
+        return $this->attendees;
     }
 
     /**
      * @param $description
+     *
      * @return $this
      */
     public function setDescription($description)
     {
         $this->description = $description;
+
+        return $this;
+    }
+
+    /**
+     * @param $descriptionHTML
+     *
+     * @return $this
+     */
+    public function setDescriptionHTML($descriptionHTML)
+    {
+        $this->descriptionHTML = $descriptionHTML;
+
         return $this;
     }
 
     /**
      * @param bool $useUtc
+     *
      * @return $this
      */
     public function setUseUtc($useUtc = true)
     {
         $this->useUtc = $useUtc;
+
         return $this;
     }
 
@@ -441,47 +597,77 @@ class Event extends Component
     }
 
     /**
-     * @param $transparency
+     * @return string
+     */
+    public function getDescriptionHTML()
+    {
+        return $this->descriptionHTML;
+    }
+
+    /**
+     * @param $status
+     *
      * @return $this
+     */
+    public function setCancelled($status)
+    {
+        $this->cancelled = (bool) $status;
+
+        return $this;
+    }
+
+    /**
+     * @param $transparency
+     *
+     * @return $this
+     *
      * @throws \InvalidArgumentException
      */
     public function setTimeTransparency($transparency)
     {
         $transparency = strtoupper($transparency);
-        if ($transparency === self::TIME_TRANSPARENCY_OPAQUE ||
-            $transparency === self::TIME_TRANSPARENCY_TRANSPARENT) {
+        if ($transparency === self::TIME_TRANSPARENCY_OPAQUE
+            || $transparency === self::TIME_TRANSPARENCY_TRANSPARENT
+        ) {
             $this->transparency = $transparency;
         } else {
-            throw new InvalidArgumentException('Invalid value for transparancy');
+            throw new \InvalidArgumentException('Invalid value for transparancy');
         }
+
         return $this;
     }
 
     /**
      * @param $status
+     *
      * @return $this
+     *
      * @throws \InvalidArgumentException
      */
     public function setStatus($status)
     {
         $status = strtoupper($status);
-        if ($status == self::STATUS_CANCELLED ||
-            $status == self::STATUS_CONFIRMED ||
-            $status == self::STATUS_TENTATIVE) {
+        if ($status == self::STATUS_CANCELLED
+            || $status == self::STATUS_CONFIRMED
+            || $status == self::STATUS_TENTATIVE
+        ) {
             $this->status = $status;
         } else {
-            throw new InvalidArgumentException('Invalid value for status');
+            throw new \InvalidArgumentException('Invalid value for status');
         }
+
         return $this;
     }
 
     /**
      * @param RecurrenceRule $recurrenceRule
+     *
      * @return $this
      */
     public function setRecurrenceRule(RecurrenceRule $recurrenceRule)
     {
         $this->recurrenceRule = $recurrenceRule;
+
         return $this;
     }
 
@@ -491,5 +677,107 @@ class Event extends Component
     public function getRecurrenceRule()
     {
         return $this->recurrenceRule;
+    }
+
+    /**
+     * @param $dtStamp
+     *
+     * @return $this
+     */
+    public function setCreated($dtStamp)
+    {
+        $this->created = $dtStamp;
+
+        return $this;
+    }
+
+    /**
+     * @param $dtStamp
+     *
+     * @return $this
+     */
+    public function setModified($dtStamp)
+    {
+        $this->modified = $dtStamp;
+
+        return $this;
+    }
+
+    /**
+     * @param $categories
+     *
+     * @return $this
+     */
+    public function setCategories($categories)
+    {
+        $this->categories = $categories;
+
+        return $this;
+    }
+
+    /**
+     * Sets the event privacy.
+     *
+     * @param bool $flag
+     *
+     * @return $this
+     */
+    public function setIsPrivate($flag)
+    {
+        $this->isPrivate = (bool) $flag;
+
+        return $this;
+    }
+
+    /**
+     * @param \DateTime $dateTime
+     *
+     * @return \Eluceo\iCal\Component\Event
+     */
+    public function addExDate(\DateTime $dateTime)
+    {
+        $this->exDates[] = $dateTime;
+
+        return $this;
+    }
+
+    /**
+     * @return \DateTime[]
+     */
+    public function getExDates()
+    {
+        return $this->exDates;
+    }
+
+    /**
+     * @param \DateTime[]
+     *
+     * @return \Eluceo\iCal\Component\Event
+     */
+    public function setExDates(array $exDates)
+    {
+        $this->exDates = $exDates;
+
+        return $this;
+    }
+
+    /**
+     * @return \Eluceo\iCal\Property\Event\RecurrenceId
+     */
+    public function getRecurrenceId()
+    {
+        return $this->recurrenceId;
+    }
+
+    /**
+     * @param RecurrenceId $recurrenceId
+     *
+     * @return \Eluceo\iCal\Component\Event
+     */
+    public function setRecurrenceId(RecurrenceId $recurrenceId)
+    {
+        $this->recurrenceId = $recurrenceId;
+
+        return $this;
     }
 }

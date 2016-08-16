@@ -1,11 +1,20 @@
 <?php
 
+/*
+ * This file is part of the eluceo/iCal package.
+ *
+ * (c) Markus Poerschke <markus@eluceo.de>
+ *
+ * This source file is subject to the MIT license that is bundled
+ * with this source code in the file LICENSE.
+ */
+
 namespace Eluceo\iCal;
 
 class ParameterBag
 {
     /**
-     * The params
+     * The params.
      *
      * @var array
      */
@@ -18,7 +27,7 @@ class ParameterBag
 
     /**
      * @param string $name
-     * @param mixed $value
+     * @param mixed  $value
      */
     public function setParam($name, $value)
     {
@@ -27,19 +36,16 @@ class ParameterBag
 
     /**
      * @param $name
-     * @return null
      */
     public function getParam($name)
     {
         if (array_key_exists($name, $this->params)) {
             return $this->params[$name];
         }
-
-        return null;
     }
 
     /**
-     * Checks if there are any params
+     * Checks if there are any params.
      *
      * @return bool
      */
@@ -73,10 +79,11 @@ class ParameterBag
     }
 
     /**
-     * Returns an escaped string for a param value
+     * Returns an escaped string for a param value.
      *
-     * @param   string  $value
-     * @return  string
+     * @param string $value
+     *
+     * @return string
      */
     public function escapeParamValue($value)
     {
@@ -84,7 +91,7 @@ class ParameterBag
         $value = str_replace('\\', '\\\\', $value);
         $value = str_replace('"', '\"', $value, $count);
         $value = str_replace("\n", '\\n', $value);
-        if (false !== strpos($value, ';') || false !== strpos($value, ',') || $count) {
+        if (false !== strpos($value, ';') || false !== strpos($value, ',') || false !== strpos($value, ':') || $count) {
             $value = '"' . $value . '"';
         }
 
@@ -94,7 +101,7 @@ class ParameterBag
     /**
      * @return string
      */
-    function __toString()
+    public function __toString()
     {
         return $this->toString();
     }

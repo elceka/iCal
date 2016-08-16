@@ -3,10 +3,10 @@
 /*
  * This file is part of the eluceo/iCal package.
  *
- * (c) Radoslav Lukac <dev@elceka.sk>
+ * (c) Markus Poerschke <markus@eluceo.de>
  *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
+ * This source file is subject to the MIT license that is bundled
+ * with this source code in the file LICENSE.
  */
 
 namespace Eluceo\iCal\Component;
@@ -14,23 +14,22 @@ namespace Eluceo\iCal\Component;
 use Eluceo\iCal\Component;
 use Eluceo\iCal\PropertyBag;
 use Eluceo\iCal\Property;
-use \InvalidArgumentException;
 
 /**
- * Implementation of the VALARM component
+ * Implementation of the VALARM component.
  */
 class Alarm extends Component
 {
     /**
-     * Alarm ACTION property
-     * 
+     * Alarm ACTION property.
+     *
      * According to RFC 5545: 3.8.6.1. Action
-     * 
+     *
      * @link http://tools.ietf.org/html/rfc5545#section-3.8.6.1
      */
-    const ACTION_AUDIO = 'AUDIO';
+    const ACTION_AUDIO   = 'AUDIO';
     const ACTION_DISPLAY = 'DISPLAY';
-    const ACTION_EMAIL = 'EMAIL';
+    const ACTION_EMAIL   = 'EMAIL';
 
     protected $action;
     protected $repeat;
@@ -41,7 +40,7 @@ class Alarm extends Component
 
     public function getType()
     {
-        return "VALARM";
+        return 'VALARM';
     }
 
     public function getAction()
@@ -77,36 +76,42 @@ class Alarm extends Component
     public function setAction($action)
     {
         $this->action = $action;
+
         return $this;
     }
 
     public function setRepeat($repeat)
     {
         $this->repeat = $repeat;
+
         return $this;
     }
 
     public function setDuration($duration)
     {
         $this->duration = $duration;
+
         return $this;
     }
 
     public function setDescription($description)
     {
         $this->description = $description;
+
         return $this;
     }
 
     public function setAttendee($attendee)
     {
         $this->attendee = $attendee;
+
         return $this;
     }
 
     public function setTrigger($trigger)
     {
         $this->trigger = $trigger;
+
         return $this;
     }
 
@@ -115,30 +120,32 @@ class Alarm extends Component
      */
     public function buildPropertyBag()
     {
-        $this->properties = new PropertyBag;
+        $propertyBag = new PropertyBag();
 
         if (null != $this->trigger) {
-            $this->properties->set('TRIGGER', $this->trigger);
+            $propertyBag->set('TRIGGER', $this->trigger);
         }
 
         if (null != $this->action) {
-            $this->properties->set('ACTION', $this->action);
+            $propertyBag->set('ACTION', $this->action);
         }
 
         if (null != $this->repeat) {
-            $this->properties->set('REPEAT', $this->repeat);
+            $propertyBag->set('REPEAT', $this->repeat);
         }
 
         if (null != $this->duration) {
-            $this->properties->set('DURATION', $this->duration);
+            $propertyBag->set('DURATION', $this->duration);
         }
 
         if (null != $this->description) {
-            $this->properties->set('DESCRIPTION', $this->description);
+            $propertyBag->set('DESCRIPTION', $this->description);
         }
 
         if (null != $this->attendee) {
-            $this->properties->set('ATTENDEE', $this->attendee);
+            $propertyBag->set('ATTENDEE', $this->attendee);
         }
+
+        return $propertyBag;
     }
 }

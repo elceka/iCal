@@ -5,41 +5,55 @@
  *
  * (c) Markus Poerschke <markus@eluceo.de>
  *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
+ * This source file is subject to the MIT license that is bundled
+ * with this source code in the file LICENSE.
  */
 
 namespace Eluceo\iCal;
 
+use Eluceo\iCal\Util\ComponentUtil;
+
 /**
- * Abstract Calender Component
+ * Abstract Calender Component.
  */
 abstract class Component
 {
     /**
-     * The PropertyBag
+     * Array of Components.
      *
-     * @var PropertyBag
-     */
-    protected $properties;
-
-    /**
-     * Array of Components
-     *
-     * @var array
+     * @var Component[]
      */
     protected $components = array();
 
     /**
-     * The type of the concrete Component
+     * The order in which the components will be rendered during build.
+     *
+     * Not defined components will be appended at the end.
+     *
+     * @var array
+     */
+    private $componentsBuildOrder = array('VTIMEZONE', 'DAYLIGHT', 'STANDARD');
+
+    /**
+     * The type of the concrete Component.
      *
      * @abstract
+     *
      * @return string
      */
     abstract public function getType();
 
     /**
-     * Adds a Component
+     * Building the PropertyBag.
+     *
+     * @abstract
+     *
+     * @return PropertyBag
+     */
+    abstract public function buildPropertyBag();
+
+    /**
+     * Adds a Component.
      *
      * If $key is given, the component at $key will be replaced else the component will be append.
      *
@@ -56,36 +70,31 @@ abstract class Component
     }
 
     /**
-     * Renders an array containing the lines of the iCal file
+     * Renders an array containing the lines of the iCal file.
      *
      * @return array
      */
     public function build()
     {
-        $this->buildPropertyBag();
-
         $lines = array();
 
         $lines[] = sprintf('BEGIN:%s', $this->getType());
 
         /** @var $property Property */
-        foreach ($this->properties as $property) {
-            $lines[] = $property->toLine();
-        }
-
-        /** @var $component Component */
-        foreach ($this->components as $component) {
-            foreach ($component->build() as $l) {
+        foreach ($this->buildPropertyBag() as $property) {
+            foreach ($property->toLines() as $l) {
                 $lines[] = $l;
             }
         }
+
+        $this->buildComponents($lines);
 
         $lines[] = sprintf('END:%s', $this->getType());
 
         $ret = array();
 
         foreach ($lines as $line) {
-            foreach ($this->fold($line) as $l) {
+            foreach (ComponentUtil::fold($line) as $l) {
                 $ret[] = $l;
             }
         }
@@ -94,55 +103,17 @@ abstract class Component
     }
 
     /**
-     * Folds a single line
-     *
-     * According to RFC 2445, all lines longer than 75 characters will be folded
-     *
-     * @link http://www.ietf.org/rfc/rfc2445.txt
-     *
-     * @param $string
-     *
-     * @return array
-     */
-    public function fold($string)
-    {
-        $lines = array();
-        $array = preg_split('/(?<!^)(?!$)/u', $string);
-
-        $line = '';
-        $lineNo = 0;
-        foreach ($array as $char) {
-            $charLen = strlen($char);
-            $lineLen = strlen($line);
-            if ($lineLen + $charLen > 75) {
-                $line = ' ' . $char;
-                ++$lineNo;
-            } else {
-                $line .= $char;
-            }
-            $lines[$lineNo] = $line;
-        }
-
-        return $lines;
-    }
-
-    /**
-     * Renders the output
+     * Renders the output.
      *
      * @return string
      */
     public function render()
     {
-        $lines = array();
-        foreach ($this->build() as $l) {
-            $lines[] = $l;
-        }
-
-        return implode("\r\n", $lines);
+        return implode("\r\n", $this->build());
     }
 
     /**
-     * Renders the output when treating the class as a string
+     * Renders the output when treating the class as a string.
      *
      * @return string
      */
@@ -152,10 +123,50 @@ abstract class Component
     }
 
     /**
-     * Building the PropertyBag
+     * @param $lines
      *
-     * @abstract
-     * @return void
+     * @return array
      */
-    abstract public function buildPropertyBag();
+    private function buildComponents(array &$lines)
+    {
+        $componentsByType = array();
+
+        /** @var $component Component */
+        foreach ($this->components as $component) {
+            $type = $component->getType();
+            if (!isset($componentsByType[$type])) {
+                $componentsByType[$type] = array();
+            }
+            $componentsByType[$type][] = $component;
+        }
+
+        // render ordered components
+        foreach ($this->componentsBuildOrder as $type) {
+            if (!isset($componentsByType[$type])) {
+                continue;
+            }
+            foreach ($componentsByType[$type] as $component) {
+                $this->addComponentLines($lines, $component);
+            }
+            unset($componentsByType[$type]);
+        }
+
+        // render all other
+        foreach ($componentsByType as $components) {
+            foreach ($components as $component) {
+                $this->addComponentLines($lines, $component);
+            }
+        }
+    }
+
+    /**
+     * @param array     $lines
+     * @param Component $component
+     */
+    private function addComponentLines(array &$lines, Component $component)
+    {
+        foreach ($component->build() as $l) {
+            $lines[] = $l;
+        }
+    }
 }
